@@ -1153,7 +1153,7 @@
 
                         <div class="card p-6">
                             <h3 class="font-bold mb-4">תורים קרובים</h3>
-                            ${app.state.appointments.filter(a => new Date(a.date) >= new Date()).sort((a, b) => new Date(a.date) - new Date(b.date)).slice(0, 10).map(a => {
+                            ${app.state.appointments.filter(a => new Date(a.date) >= new Date(new Date().toISOString().split('T')[0])).sort((a, b) => new Date(a.date) - new Date(b.date)).slice(0, 10).map(a => {
                                 const d = new Date(a.date);
                                 return `
                                 <div class="flex justify-between items-center p-4 bg-gray-50 rounded-xl mb-2">
@@ -1305,7 +1305,7 @@
                             const totalPaid = history.reduce((sum, m) => sum + (m.isPaid !== false && m.payment ? parseFloat(m.payment) : 0), 0);
                             const lastSession = history.length > 0 ? history[history.length - 1] : null;
                             const escapedName = app.esc(c.name);
-                            const safeNameForJs = c.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"');
+                            const safeNameForJs = c.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"').replace(/`/g,'\\`').replace(/\r?\n/g,' ');
                             const isActive = c._status === 'active';
                             const statusBadge = history.length === 0
                                 ? '<span class="text-xs font-bold bg-gray-100 text-gray-400 px-2 py-0.5 rounded-lg">חדש</span>'
@@ -2761,7 +2761,8 @@
                 const monthMissions = app.state.missions.filter(ms => {
                     const p = ms.date.split('.');
                     if (p.length < 3) return false;
-                    return parseInt(p[1]) === m && parseInt(p[2]) + 2000 === y;
+                    const yr2 = parseInt(p[2]); const fullYr2 = yr2 < 100 ? yr2 + 2000 : yr2;
+                    return parseInt(p[1]) === m && fullYr2 === y;
                 });
                 const activeClients = new Set(monthMissions.map(ms => ms.client)).size;
 
@@ -2829,7 +2830,8 @@
                 const yearMissions = app.state.missions.filter(ms => {
                     const p = ms.date.split('.');
                     if (p.length < 3) return false;
-                    return parseInt(p[2]) + 2000 === year;
+                    const yr3 = parseInt(p[2]); const fullYr3 = yr3 < 100 ? yr3 + 2000 : yr3;
+                    return fullYr3 === year;
                 });
                 const activeClientsSet = new Set(yearMissions.map(m => m.client));
                 const avgPerSession = yearMissions.length > 0 ? Math.round(yearIncome / yearMissions.length) : 0;
