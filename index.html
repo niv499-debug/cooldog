@@ -1330,6 +1330,7 @@
                                             </div>
                                         </div>
                                         <div class="flex gap-1 flex-shrink-0">
+                                            <button onclick="app.exportClientFilePDF('${c.id}')" class="w-9 h-9 flex items-center justify-center rounded-xl bg-purple-50 text-purple-500 hover:bg-purple-100 text-base" title="תיק לקוח PDF">📋</button>
                                             <button onclick="app.openReceiptModal('${c.id}')" class="w-9 h-9 flex items-center justify-center rounded-xl bg-green-50 text-green-500 hover:bg-green-100 text-base" title="קבלה">🧾</button>
                                             <button onclick="app.openClientModal('${c.id}')" class="w-9 h-9 flex items-center justify-center rounded-xl bg-blue-50 text-blue-400 hover:bg-blue-100 text-base">✏️</button>
                                             <button onclick="app.delClient('${c.id}')" class="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-50 text-gray-300 hover:bg-red-50 hover:text-red-400 text-base">🗑️</button>
@@ -2741,6 +2742,141 @@
                 `;
 
                 await app._htmlToPDF(html, `CoolDog-לקוחות-${now.toISOString().split('T')[0]}.pdf`);
+            },
+
+            exportClientFilePDF: async (clientId) => {
+                const c = app.state.clients.find(x => x.id === clientId);
+                if (!c) return;
+                const now = new Date();
+                const sessions = app.state.missions.filter(m => m.client === c.name);
+
+                const totalPaid = sessions.reduce((s, m) => s + (m.isPaid !== false && m.payment ? parseFloat(m.payment) : 0), 0);
+                const totalDebt = sessions.reduce((s, m) => s + (m.isPaid === false && m.payment ? parseFloat(m.payment) : 0), 0);
+                const avgPayment = sessions.filter(m => m.payment).length > 0
+                    ? Math.round(sessions.reduce((s, m) => s + (parseFloat(m.payment) || 0), 0) / sessions.filter(m => m.payment).length)
+                    : 0;
+
+                const dogs = c.dogs && c.dogs.length > 0 ? c.dogs : (c.dogName ? [{ name: c.dogName, breed: c.breed || '', dob: c.dogDob || '' }] : []);
+                const dogsList = dogs.filter(d => d.name).map(d =>
+                    `<span style="display:inline-block;background:rgba(255,255,255,0.2);border-radius:8px;padding:3px 10px;font-size:13px;font-weight:700;margin-left:6px;">🐕 ${d.name}${d.breed ? ' · ' + d.breed : ''}${d.dob ? ' · ' + app.calculateAge(d.dob) : ''}</span>`
+                ).join('');
+
+                const statusColor = app.clientStatus(c) === 'active' ? '#10b981' : app.clientStatus(c) === 'inactive' ? '#9ca3af' : '#3b82f6';
+                const statusLabel = app.clientStatus(c) === 'active' ? 'פעיל' : app.clientStatus(c) === 'inactive' ? 'לא פעיל' : 'חדש';
+
+                const sessionRows = sessions.slice().reverse().map(m => {
+                    const paidBadge = m.payment
+                        ? (m.isPaid === false
+                            ? `<span class="badge badge-red">לא שולם</span>`
+                            : `<span class="badge badge-green">שולם</span>`)
+                        : '';
+                    const typeBadge = m.type && m.type !== 'שיעור'
+                        ? `<span class="badge badge-blue">${m.type}</span>`
+                        : 'שיעור';
+                    return `<tr>
+                        <td style="color:#888;white-space:nowrap;">${m.date}</td>
+                        <td>${typeBadge}</td>
+                        <td style="max-width:320px;">${m.report ? m.report.substring(0, 100) + (m.report.length > 100 ? '...' : '') : '-'}</td>
+                        <td class="${m.payment ? (m.isPaid === false ? 'red' : 'green') : ''}" style="white-space:nowrap;font-weight:700;">${m.payment ? '&#x20AA;' + Number(m.payment).toLocaleString() : '-'}</td>
+                        <td>${paidBadge}</td>
+                    </tr>`;
+                }).join('');
+
+                const timelineBar = (() => {
+                    if (sessions.length < 2) return '';
+                    const perMonth = {};
+                    sessions.forEach(m => {
+                        const p = m.date.split('.');
+                        if (p.length < 3) return;
+                        const yr = parseInt(p[2]) < 100 ? parseInt(p[2]) + 2000 : parseInt(p[2]);
+                        const key = `${p[1].padStart(2,'0')}/${yr}`;
+                        perMonth[key] = (perMonth[key] || 0) + 1;
+                    });
+                    const maxCount = Math.max(...Object.values(perMonth));
+                    const monthNames = ['','ינו','פבר','מרץ','אפר','מאי','יונ','יול','אוג','ספט','אוק','נוב','דצמ'];
+                    const bars = Object.entries(perMonth).sort().map(([k, v]) => {
+                        const h = Math.max(6, Math.round((v / maxCount) * 48));
+                        const [mon, yr] = k.split('/');
+                        const label = monthNames[parseInt(mon)];
+                        return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;min-width:28px;">
+                            <div style="font-size:10px;color:#888;font-weight:700;">${v > 1 ? v : ''}</div>
+                            <div style="width:100%;background:#e31e24;border-radius:4px 4px 0 0;height:${h}px;opacity:0.8;"></div>
+                            <div style="font-size:9px;color:#aaa;white-space:nowrap;margin-top:4px;">${label}</div>
+                        </div>`;
+                    }).join('');
+                    return `
+                    <div class="section-title">פעילות לפי חודש</div>
+                    <div style="background:#fff;border-radius:12px;padding:16px 16px 28px;border:1px solid #f0e8e8;margin-bottom:8px;">
+                        <div style="display:flex;align-items:flex-end;gap:4px;height:64px;">${bars}</div>
+                    </div>`;
+                })();
+
+                const html = app._pdfCSS() + `
+                    <style>
+                        .cf-header { background: linear-gradient(135deg, #1a1a1a, #333); color: white; padding: 28px 40px; border-radius: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start; }
+                        .cf-avatar { width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg,#e31e24,#ff6b6b); color: white; font-weight: 900; font-size: 28px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+                        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+                        .info-box { background: #fff; border: 1px solid #f0e8e8; border-radius: 12px; padding: 14px 16px; }
+                        .info-box .lbl { font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; margin-bottom: 4px; }
+                        .info-box .val { font-size: 18px; font-weight: 900; color: #1a1a1a; }
+                    </style>
+
+                    <div class="cf-header">
+                        <div style="display:flex;align-items:center;gap:18px;">
+                            <div class="cf-avatar">${c.name.charAt(0)}</div>
+                            <div>
+                                <div style="font-size:26px;font-weight:900;font-family:'Fredoka',sans-serif;">${c.name}</div>
+                                <div style="font-size:13px;opacity:0.75;margin-top:4px;">${c.serviceType || 'אילוף פרטי'}${c.phone ? ' &nbsp;|&nbsp; ' + c.phone : ''}${c.address ? ' &nbsp;|&nbsp; ' + c.address : ''}</div>
+                                ${dogsList ? `<div style="margin-top:8px;">${dogsList}</div>` : ''}
+                            </div>
+                        </div>
+                        <div style="text-align:left;flex-shrink:0;">
+                            <div style="font-size:20px;font-weight:900;font-family:'Fredoka',sans-serif;">CoolDog</div>
+                            <div style="font-size:12px;opacity:0.65;margin-top:2px;">תיק לקוח</div>
+                            <div style="font-size:11px;opacity:0.5;margin-top:4px;">${now.toLocaleDateString('he-IL')}</div>
+                            <div style="margin-top:8px;background:${statusColor};color:white;border-radius:8px;padding:3px 14px;font-size:12px;font-weight:700;text-align:center;">${statusLabel}</div>
+                        </div>
+                    </div>
+
+                    <div class="info-grid">
+                        <div class="info-box">
+                            <div class="lbl">סה"כ שיעורים</div>
+                            <div class="val" style="color:#3b82f6;">${sessions.length}</div>
+                        </div>
+                        <div class="info-box">
+                            <div class="lbl">סה"כ שולם</div>
+                            <div class="val" style="color:#10b981;">&#x20AA;${totalPaid.toLocaleString()}</div>
+                        </div>
+                        <div class="info-box">
+                            <div class="lbl">ממוצע לשיעור</div>
+                            <div class="val">&#x20AA;${avgPayment.toLocaleString()}</div>
+                        </div>
+                        <div class="info-box">
+                            <div class="lbl">${totalDebt > 0 ? 'חוב פתוח' : 'לקוח מאז'}</div>
+                            <div class="val" style="${totalDebt > 0 ? 'color:#e31e24;' : ''}">${totalDebt > 0 ? '&#x20AA;' + totalDebt.toLocaleString() : (c.startDate ? new Date(c.startDate).toLocaleDateString('he-IL') : (sessions.length > 0 ? sessions[0].date : '\u2014'))}</div>
+                        </div>
+                    </div>
+
+                    ${c.notes ? `<div style="background:#fef3c7;border-right:4px solid #f59e0b;border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:13px;color:#92400e;"><strong>הערות:</strong> ${c.notes}</div>` : ''}
+
+                    ${timelineBar}
+
+                    ${sessions.length > 0 ? `
+                    <div class="section-title">היסטוריית שיעורים (${sessions.length})</div>
+                    <table>
+                        <thead><tr><th>תאריך</th><th>סוג</th><th>סיכום</th><th>תשלום</th><th>סטטוס</th></tr></thead>
+                        <tbody>${sessionRows}</tbody>
+                        <tr class="total-row">
+                            <td colspan="3">סה"כ</td>
+                            <td>&#x20AA;${(totalPaid + totalDebt).toLocaleString()}</td>
+                            <td>${totalDebt > 0 ? 'חוב: &#x20AA;' + totalDebt.toLocaleString() : '\u2713 מסולק'}</td>
+                        </tr>
+                    </table>` : '<p style="text-align:center;color:#aaa;padding:24px;">אין שיעורים רשומים</p>'}
+
+                    <div class="pdf-footer">CoolDog &nbsp;|&nbsp; תיק לקוח: ${c.name} &nbsp;|&nbsp; הופק ב-${now.toLocaleDateString('he-IL')}</div>
+                `;
+
+                await app._htmlToPDF(html, `\u05ea\u05d9\u05e7-\u05dc\u05e7\u05d5\u05d7-${c.name}-${now.toISOString().split('T')[0]}.pdf`);
             },
 
             exportMonthlyPDF: async () => {
