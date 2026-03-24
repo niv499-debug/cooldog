@@ -1330,7 +1330,7 @@
                                             </div>
                                         </div>
                                         <div class="flex gap-1 flex-shrink-0">
-                                            <button onclick="app.exportClientFilePDF('${c.id}')" class="w-9 h-9 flex items-center justify-center rounded-xl bg-purple-50 text-purple-500 hover:bg-purple-100 text-base" title="תיק לקוח PDF">📋</button>
+                                            <button onclick="app.exportClientFilePDF('${c.id}')" class="w-9 h-9 flex items-center justify-center rounded-xl bg-red-50 text-red-400 hover:bg-red-100 text-base" title="תיק לקוח PDF">📋</button>
                                             <button onclick="app.openReceiptModal('${c.id}')" class="w-9 h-9 flex items-center justify-center rounded-xl bg-green-50 text-green-500 hover:bg-green-100 text-base" title="קבלה">🧾</button>
                                             <button onclick="app.openClientModal('${c.id}')" class="w-9 h-9 flex items-center justify-center rounded-xl bg-blue-50 text-blue-400 hover:bg-blue-100 text-base">✏️</button>
                                             <button onclick="app.delClient('${c.id}')" class="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-50 text-gray-300 hover:bg-red-50 hover:text-red-400 text-base">🗑️</button>
@@ -2750,131 +2750,141 @@
                 const now = new Date();
                 const sessions = app.state.missions.filter(m => m.client === c.name);
 
-                const totalPaid = sessions.reduce((s, m) => s + (m.isPaid !== false && m.payment ? parseFloat(m.payment) : 0), 0);
-                const totalDebt = sessions.reduce((s, m) => s + (m.isPaid === false && m.payment ? parseFloat(m.payment) : 0), 0);
-                const avgPayment = sessions.filter(m => m.payment).length > 0
-                    ? Math.round(sessions.reduce((s, m) => s + (parseFloat(m.payment) || 0), 0) / sessions.filter(m => m.payment).length)
-                    : 0;
+                const totalPaid   = sessions.reduce((s,m) => s + (m.isPaid !== false && m.payment ? parseFloat(m.payment) : 0), 0);
+                const totalDebt   = sessions.reduce((s,m) => s + (m.isPaid === false  && m.payment ? parseFloat(m.payment) : 0), 0);
+                const totalCharged = totalPaid + totalDebt;
+                const avgPayment  = sessions.filter(m => m.payment).length > 0
+                    ? Math.round(totalCharged / sessions.filter(m => m.payment).length) : 0;
 
-                const dogs = c.dogs && c.dogs.length > 0 ? c.dogs : (c.dogName ? [{ name: c.dogName, breed: c.breed || '', dob: c.dogDob || '' }] : []);
-                const dogsList = dogs.filter(d => d.name).map(d =>
-                    `<span style="display:inline-block;background:rgba(255,255,255,0.2);border-radius:8px;padding:3px 10px;font-size:13px;font-weight:700;margin-left:6px;">🐕 ${d.name}${d.breed ? ' · ' + d.breed : ''}${d.dob ? ' · ' + app.calculateAge(d.dob) : ''}</span>`
+                const dogs = c.dogs && c.dogs.length > 0
+                    ? c.dogs
+                    : (c.dogName ? [{ name: c.dogName, breed: c.breed||'', dob: c.dogDob||'' }] : []);
+                const dogTags = dogs.filter(d => d.name).map(d =>
+                    `<span style="background:#fee2e2;color:#991b1b;border-radius:6px;padding:2px 10px;font-size:12px;font-weight:700;margin-left:6px;">🐕 ${d.name}${d.breed?' · '+d.breed:''}${d.dob?' · '+app.calculateAge(d.dob):''}</span>`
                 ).join('');
 
-                const statusColor = app.clientStatus(c) === 'active' ? '#10b981' : app.clientStatus(c) === 'inactive' ? '#9ca3af' : '#3b82f6';
-                const statusLabel = app.clientStatus(c) === 'active' ? 'פעיל' : app.clientStatus(c) === 'inactive' ? 'לא פעיל' : 'חדש';
+                const statusColor = {'active':'#10b981','inactive':'#9ca3af','new':'#3b82f6'}[app.clientStatus(c)] || '#9ca3af';
+                const statusLabel = {'active':'פעיל','inactive':'לא פעיל','new':'חדש'}[app.clientStatus(c)] || '';
 
-                const sessionRows = sessions.slice().reverse().map(m => {
-                    const paidBadge = m.payment
-                        ? (m.isPaid === false
-                            ? `<span class="badge badge-red">לא שולם</span>`
-                            : `<span class="badge badge-green">שולם</span>`)
-                        : '';
-                    const typeBadge = m.type && m.type !== 'שיעור'
-                        ? `<span class="badge badge-blue">${m.type}</span>`
-                        : 'שיעור';
-                    return `<tr>
-                        <td style="color:#888;white-space:nowrap;">${m.date}</td>
-                        <td>${typeBadge}</td>
-                        <td style="max-width:320px;">${m.report ? m.report.substring(0, 100) + (m.report.length > 100 ? '...' : '') : '-'}</td>
-                        <td class="${m.payment ? (m.isPaid === false ? 'red' : 'green') : ''}" style="white-space:nowrap;font-weight:700;">${m.payment ? '&#x20AA;' + Number(m.payment).toLocaleString() : '-'}</td>
-                        <td>${paidBadge}</td>
-                    </tr>`;
-                }).join('');
-
-                const timelineBar = (() => {
-                    if (sessions.length < 2) return '';
+                // ── Timeline bar ──
+                let timelineHtml = '';
+                if (sessions.length >= 2) {
                     const perMonth = {};
                     sessions.forEach(m => {
                         const p = m.date.split('.');
                         if (p.length < 3) return;
-                        const yr = parseInt(p[2]) < 100 ? parseInt(p[2]) + 2000 : parseInt(p[2]);
-                        const key = `${p[1].padStart(2,'0')}/${yr}`;
-                        perMonth[key] = (perMonth[key] || 0) + 1;
+                        const yr = parseInt(p[2]) < 100 ? parseInt(p[2])+2000 : parseInt(p[2]);
+                        const key = `${String(parseInt(p[1])).padStart(2,'0')}/${yr}`;
+                        perMonth[key] = (perMonth[key]||0)+1;
                     });
-                    const maxCount = Math.max(...Object.values(perMonth));
-                    const monthNames = ['','ינו','פבר','מרץ','אפר','מאי','יונ','יול','אוג','ספט','אוק','נוב','דצמ'];
-                    const bars = Object.entries(perMonth).sort().map(([k, v]) => {
-                        const h = Math.max(6, Math.round((v / maxCount) * 48));
-                        const [mon, yr] = k.split('/');
-                        const label = monthNames[parseInt(mon)];
-                        return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;min-width:28px;">
-                            <div style="font-size:10px;color:#888;font-weight:700;">${v > 1 ? v : ''}</div>
-                            <div style="width:100%;background:#e31e24;border-radius:4px 4px 0 0;height:${h}px;opacity:0.8;"></div>
-                            <div style="font-size:9px;color:#aaa;white-space:nowrap;margin-top:4px;">${label}</div>
+                    const maxC = Math.max(...Object.values(perMonth));
+                    const mnL  = ['','ינו','פבר','מרץ','אפר','מאי','יונ','יול','אוג','ספט','אוק','נוב','דצמ'];
+                    const bars = Object.entries(perMonth).sort().map(([k,v]) => {
+                        const pct = Math.round((v/maxC)*100);
+                        const [mon] = k.split('/');
+                        return `<div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;">
+                            <div style="font-size:10px;font-weight:700;color:#e31e24;height:14px;">${v>1?v:''}</div>
+                            <div style="width:70%;background:#e31e24;border-radius:3px 3px 0 0;height:${4+Math.round(pct*0.36)}px;"></div>
+                            <div style="font-size:10px;color:#999;">${mnL[parseInt(mon)]}</div>
                         </div>`;
                     }).join('');
-                    return `
-                    <div class="section-title">פעילות לפי חודש</div>
-                    <div style="background:#fff;border-radius:12px;padding:16px 16px 28px;border:1px solid #f0e8e8;margin-bottom:8px;">
-                        <div style="display:flex;align-items:flex-end;gap:4px;height:64px;">${bars}</div>
-                    </div>`;
-                })();
-
-                const html = app._pdfCSS() + `
-                    <style>
-                        .cf-header { background: linear-gradient(135deg, #1a1a1a, #333); color: white; padding: 28px 40px; border-radius: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start; }
-                        .cf-avatar { width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg,#e31e24,#ff6b6b); color: white; font-weight: 900; font-size: 28px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-                        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
-                        .info-box { background: #fff; border: 1px solid #f0e8e8; border-radius: 12px; padding: 14px 16px; }
-                        .info-box .lbl { font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; margin-bottom: 4px; }
-                        .info-box .val { font-size: 18px; font-weight: 900; color: #1a1a1a; }
-                    </style>
-
-                    <div class="cf-header">
-                        <div style="display:flex;align-items:center;gap:18px;">
-                            <div class="cf-avatar">${c.name.charAt(0)}</div>
-                            <div>
-                                <div style="font-size:26px;font-weight:900;font-family:'Fredoka',sans-serif;">${c.name}</div>
-                                <div style="font-size:13px;opacity:0.75;margin-top:4px;">${c.serviceType || 'אילוף פרטי'}${c.phone ? ' &nbsp;|&nbsp; ' + c.phone : ''}${c.address ? ' &nbsp;|&nbsp; ' + c.address : ''}</div>
-                                ${dogsList ? `<div style="margin-top:8px;">${dogsList}</div>` : ''}
+                    timelineHtml = `
+                        <div style="margin-bottom:20px;">
+                            <div style="font-size:14px;font-weight:900;color:#1a1a1a;margin-bottom:10px;padding-right:10px;border-right:4px solid #e31e24;">פעילות לפי חודש</div>
+                            <div style="background:#fff;border:1px solid #f0e8e8;border-radius:12px;padding:14px 14px 10px;">
+                                <div style="display:flex;align-items:flex-end;gap:3px;height:56px;">${bars}</div>
                             </div>
-                        </div>
-                        <div style="text-align:left;flex-shrink:0;">
-                            <div style="font-size:20px;font-weight:900;font-family:'Fredoka',sans-serif;">CoolDog</div>
-                            <div style="font-size:12px;opacity:0.65;margin-top:2px;">תיק לקוח</div>
-                            <div style="font-size:11px;opacity:0.5;margin-top:4px;">${now.toLocaleDateString('he-IL')}</div>
-                            <div style="margin-top:8px;background:${statusColor};color:white;border-radius:8px;padding:3px 14px;font-size:12px;font-weight:700;text-align:center;">${statusLabel}</div>
+                        </div>`;
+                }
+
+                // ── Session rows ──
+                const sessionRows = sessions.slice().reverse().map(m => {
+                    const paid   = m.isPaid !== false;
+                    const hasAmt = m.payment;
+                    const statusBg   = !hasAmt ? '' : paid ? '#d1fae5' : '#fee2e2';
+                    const statusTxt  = !hasAmt ? '' : paid ? '#065f46' : '#991b1b';
+                    const statusStr  = !hasAmt ? '' : paid ? 'שולם' : 'לא שולם';
+                    const amtColor   = !hasAmt ? '' : paid ? '#059669' : '#dc2626';
+                    const typeStr    = (m.type && m.type !== 'שיעור') ? m.type : 'שיעור';
+                    const summary    = m.report ? (m.report.length>90 ? m.report.substring(0,90)+'...' : m.report) : '—';
+                    return `<tr>
+                        <td style="white-space:nowrap;color:#6b7280;font-size:12px;">${m.date}</td>
+                        <td><span style="background:#dbeafe;color:#1e40af;border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700;">${typeStr}</span></td>
+                        <td style="font-size:12px;color:#374151;">${summary}</td>
+                        <td style="font-weight:800;color:${amtColor||'#9ca3af'};white-space:nowrap;">${hasAmt?'&#x20AA;'+Number(m.payment).toLocaleString():'—'}</td>
+                        <td>${statusStr?`<span style="background:${statusBg};color:${statusTxt};border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700;">${statusStr}</span>`:''}</td>
+                    </tr>`;
+                }).join('');
+
+                const sinceStr = c.startDate
+                    ? new Date(c.startDate).toLocaleDateString('he-IL')
+                    : (sessions.length > 0 ? sessions[0].date : '—');
+
+                const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+                <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700;800;900&family=Fredoka:wght@700&display=swap" rel="stylesheet">
+                <style>
+                *{box-sizing:border-box;margin:0;padding:0;}
+                body{font-family:'Assistant',sans-serif;direction:rtl;background:#fdfaf5;color:#1a1a1a;padding:32px;}
+                .header{background:linear-gradient(135deg,#1a1a1a 0%,#2d2d2d 100%);color:white;padding:28px 32px;border-radius:16px;margin-bottom:22px;display:flex;justify-content:space-between;align-items:flex-start;}
+                .header-right{display:flex;align-items:center;gap:16px;}
+                .avatar{width:60px;height:60px;min-width:60px;border-radius:50%;background:linear-gradient(135deg,#e31e24,#ff6b6b);color:white;font-weight:900;font-size:26px;display:flex;align-items:center;justify-content:center;border:3px solid rgba(255,255,255,0.2);}
+                .header-left{text-align:left;flex-shrink:0;}
+                .kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+                .kpi{background:white;border:1px solid #f0e8e8;border-radius:12px;padding:16px 18px;}
+                .kpi .lbl{font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;}
+                .kpi .val{font-size:20px;font-weight:900;}
+                .section-title{font-size:15px;font-weight:900;color:#1a1a1a;margin:18px 0 10px;padding-right:10px;border-right:4px solid #e31e24;}
+                table{width:100%;border-collapse:collapse;font-size:13px;}
+                thead tr{background:#e31e24;}
+                thead th{padding:9px 12px;font-weight:700;color:white;text-align:right;}
+                tbody tr:nth-child(odd){background:#fdf5f5;}
+                tbody tr:nth-child(even){background:#fff;}
+                tbody td{padding:8px 12px;border-bottom:1px solid #f5eded;}
+                .total-row td{background:#1a1a1a!important;color:white;font-weight:900;padding:10px 12px;}
+                .footer{text-align:center;margin-top:24px;padding-top:14px;border-top:2px solid #e31e24;font-size:11px;color:#aaa;}
+                </style></head><body>
+
+                <div class="header">
+                    <div class="header-right">
+                        <div class="avatar">${c.name.charAt(0)}</div>
+                        <div>
+                            <div style="font-size:24px;font-weight:900;font-family:'Fredoka',sans-serif;line-height:1.1;">${c.name}</div>
+                            <div style="font-size:12px;opacity:0.7;margin-top:5px;">${[c.serviceType||'אילוף פרטי', c.phone, c.address].filter(Boolean).join(' · ')}</div>
+                            ${dogTags ? `<div style="margin-top:8px;">${dogTags}</div>` : ''}
                         </div>
                     </div>
-
-                    <div class="info-grid">
-                        <div class="info-box">
-                            <div class="lbl">סה"כ שיעורים</div>
-                            <div class="val" style="color:#3b82f6;">${sessions.length}</div>
-                        </div>
-                        <div class="info-box">
-                            <div class="lbl">סה"כ שולם</div>
-                            <div class="val" style="color:#10b981;">&#x20AA;${totalPaid.toLocaleString()}</div>
-                        </div>
-                        <div class="info-box">
-                            <div class="lbl">ממוצע לשיעור</div>
-                            <div class="val">&#x20AA;${avgPayment.toLocaleString()}</div>
-                        </div>
-                        <div class="info-box">
-                            <div class="lbl">${totalDebt > 0 ? 'חוב פתוח' : 'לקוח מאז'}</div>
-                            <div class="val" style="${totalDebt > 0 ? 'color:#e31e24;' : ''}">${totalDebt > 0 ? '&#x20AA;' + totalDebt.toLocaleString() : (c.startDate ? new Date(c.startDate).toLocaleDateString('he-IL') : (sessions.length > 0 ? sessions[0].date : '\u2014'))}</div>
-                        </div>
+                    <div class="header-left">
+                        <div style="font-size:18px;font-weight:900;font-family:'Fredoka',sans-serif;">CoolDog</div>
+                        <div style="font-size:11px;opacity:0.55;margin-top:3px;">תיק לקוח · ${now.toLocaleDateString('he-IL')}</div>
+                        <div style="margin-top:10px;background:${statusColor};color:white;border-radius:8px;padding:4px 14px;font-size:12px;font-weight:700;text-align:center;">${statusLabel}</div>
                     </div>
+                </div>
 
-                    ${c.notes ? `<div style="background:#fef3c7;border-right:4px solid #f59e0b;border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:13px;color:#92400e;"><strong>הערות:</strong> ${c.notes}</div>` : ''}
+                <div class="kpi-row">
+                    <div class="kpi"><div class="lbl">שיעורים</div><div class="val" style="color:#3b82f6;">${sessions.length}</div></div>
+                    <div class="kpi"><div class="lbl">סה"כ שולם</div><div class="val" style="color:#10b981;">&#x20AA;${totalPaid.toLocaleString()}</div></div>
+                    <div class="kpi"><div class="lbl">ממוצע לשיעור</div><div class="val">&#x20AA;${avgPayment.toLocaleString()}</div></div>
+                    <div class="kpi"><div class="lbl">${totalDebt>0?'חוב פתוח':'לקוח מאז'}</div><div class="val" style="${totalDebt>0?'color:#e31e24;':''}">${totalDebt>0?'&#x20AA;'+totalDebt.toLocaleString():sinceStr}</div></div>
+                </div>
 
-                    ${timelineBar}
+                ${c.notes ? `<div style="background:#fef3c7;border-right:4px solid #f59e0b;border-radius:10px;padding:11px 14px;margin-bottom:18px;font-size:13px;color:#92400e;"><strong>הערות: </strong>${c.notes}</div>` : ''}
 
-                    ${sessions.length > 0 ? `
-                    <div class="section-title">היסטוריית שיעורים (${sessions.length})</div>
-                    <table>
-                        <thead><tr><th>תאריך</th><th>סוג</th><th>סיכום</th><th>תשלום</th><th>סטטוס</th></tr></thead>
-                        <tbody>${sessionRows}</tbody>
-                        <tr class="total-row">
-                            <td colspan="3">סה"כ</td>
-                            <td>&#x20AA;${(totalPaid + totalDebt).toLocaleString()}</td>
-                            <td>${totalDebt > 0 ? 'חוב: &#x20AA;' + totalDebt.toLocaleString() : '\u2713 מסולק'}</td>
-                        </tr>
-                    </table>` : '<p style="text-align:center;color:#aaa;padding:24px;">אין שיעורים רשומים</p>'}
+                ${timelineHtml}
 
-                    <div class="pdf-footer">CoolDog &nbsp;|&nbsp; תיק לקוח: ${c.name} &nbsp;|&nbsp; הופק ב-${now.toLocaleDateString('he-IL')}</div>
-                `;
+                ${sessions.length > 0 ? `
+                <div class="section-title">היסטוריית שיעורים (${sessions.length})</div>
+                <table>
+                    <thead><tr><th>תאריך</th><th>סוג</th><th>סיכום</th><th>תשלום</th><th>סטטוס</th></tr></thead>
+                    <tbody>${sessionRows}</tbody>
+                    <tr class="total-row">
+                        <td colspan="3">סה"כ</td>
+                        <td>&#x20AA;${totalCharged.toLocaleString()}</td>
+                        <td>${totalDebt>0?'חוב: &#x20AA;'+totalDebt.toLocaleString():'✓ מסולק'}</td>
+                    </tr>
+                </table>` : '<p style="text-align:center;color:#aaa;padding:32px 0;">אין שיעורים רשומים</p>'}
+
+                <div class="footer">CoolDog &nbsp;|&nbsp; תיק לקוח: ${c.name} &nbsp;|&nbsp; הופק ב-${now.toLocaleDateString('he-IL')}</div>
+                </body></html>`;
 
                 await app._htmlToPDF(html, `\u05ea\u05d9\u05e7-\u05dc\u05e7\u05d5\u05d7-${c.name}-${now.toISOString().split('T')[0]}.pdf`);
             },
