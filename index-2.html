@@ -1301,7 +1301,7 @@
                         </div>` : ''}
 
                         ${clients.map(c => {
-                            const history = app.state.missions.filter(m => m.client === c.name).sort((a, b) => { const parse = s => { const p = (s||'').split('.'); if(p.length<3) return 0; const y = p[2].length===4?parseInt(p[2]):parseInt(p[2])+2000; return new Date(y,parseInt(p[1])-1,parseInt(p[0])).getTime(); }; return parse(a.date) - parse(b.date); });
+                            const history = app.state.missions.filter(m => m.client === c.name).sort((a, b) => { const pd = s => { if(!s) return 0; s=String(s).trim(); if(/^\d{4}-\d{2}-\d{2}/.test(s)) return new Date(s).getTime(); const p=s.split('.'); if(p.length===3){const y=p[2].length===4?parseInt(p[2]):parseInt(p[2])+2000; return new Date(y,parseInt(p[1])-1,parseInt(p[0])).getTime();} return new Date(s).getTime()||0; }; return pd(a.date)-pd(b.date); });
                             const totalPaid = history.reduce((sum, m) => sum + (m.isPaid !== false && m.payment ? parseFloat(m.payment) : 0), 0);
                             const lastSession = history.length > 0 ? history[history.length - 1] : null;
                             const escapedName = app.esc(c.name);
@@ -2280,19 +2280,24 @@
 
             // ── CLIENT STATUS (auto: inactive after 60 days) ──
             clientStatus: (c) => {
-                const missions = app.state.missions.filter(m => m.client === c.name).sort((a, b) => {
-                    const parse = s => { const p = (s||'').split('.'); if(p.length<3) return 0; const y = p[2].length===4?parseInt(p[2]):parseInt(p[2])+2000; return new Date(y, parseInt(p[1])-1, parseInt(p[0])).getTime(); };
-                    return parse(a.date) - parse(b.date);
-                });
-                if (missions.length === 0) return 'new';
-                const lastDate = missions[missions.length - 1].date;
-                // Parse DD.MM.YYYY or DD.MM.YY
-                const p = lastDate.split('.');
-                if (p.length < 3) return 'active';
-                const year = p[2].length === 4 ? parseInt(p[2]) : parseInt(p[2]) + 2000;
-                const d = new Date(year, parseInt(p[1]) - 1, parseInt(p[0]));
-                if (isNaN(d.getTime())) return 'active';
-                const diffDays = (new Date() - d) / (1000 * 60 * 60 * 24);
+                const parseAnyDate = s => {
+                    if (!s) return null;
+                    s = String(s).trim();
+                    if (/^\d{4}-\d{2}-\d{2}/.test(s)) { const d = new Date(s); return isNaN(d) ? null : d; }
+                    const p = s.split('.');
+                    if (p.length === 3) {
+                        const day = parseInt(p[0]), mon = parseInt(p[1]);
+                        const year = p[2].length === 4 ? parseInt(p[2]) : parseInt(p[2]) + 2000;
+                        const d = new Date(year, mon - 1, day);
+                        return isNaN(d) ? null : d;
+                    }
+                    const d = new Date(s); return isNaN(d) ? null : d;
+                };
+                const allMissions = app.state.missions.filter(m => m.client === c.name);
+                if (allMissions.length === 0) return 'new';
+                const missions = allMissions.map(m => ({ _ts: parseAnyDate(m.date) })).filter(m => m._ts).sort((a, b) => a._ts - b._ts);
+                if (missions.length === 0) return 'active';
+                const diffDays = (new Date() - missions[missions.length - 1]._ts) / (1000 * 60 * 60 * 24);
                 return diffDays > 60 ? 'inactive' : 'active';
             },
 
