@@ -1301,7 +1301,7 @@
                         </div>` : ''}
 
                         ${clients.map(c => {
-                            const history = app.state.missions.filter(m => m.client === c.name);
+                            const history = app.state.missions.filter(m => m.client === c.name).sort((a, b) => { const parse = s => { const p = (s||'').split('.'); if(p.length<3) return 0; const y = p[2].length===4?parseInt(p[2]):parseInt(p[2])+2000; return new Date(y,parseInt(p[1])-1,parseInt(p[0])).getTime(); }; return parse(a.date) - parse(b.date); });
                             const totalPaid = history.reduce((sum, m) => sum + (m.isPaid !== false && m.payment ? parseFloat(m.payment) : 0), 0);
                             const lastSession = history.length > 0 ? history[history.length - 1] : null;
                             const escapedName = app.esc(c.name);
@@ -1982,7 +1982,7 @@
 
                 // Per-client stats
                 const clientStats = clients.map(c => {
-                    const sessions = missions.filter(m => m.client === c.name);
+                    const sessions = missions.filter(m => m.client === c.name).sort((a, b) => { const parse = s => { const p = (s||'').split('.'); if(p.length<3) return 0; const y = p[2].length===4?parseInt(p[2]):parseInt(p[2])+2000; return new Date(y,parseInt(p[1])-1,parseInt(p[0])).getTime(); }; return parse(a.date) - parse(b.date); });
                     const revenue = sessions.reduce((s, m) => s + (parseFloat(m.payment) || 0), 0);
                     const lastSession = sessions.length > 0 ? sessions[sessions.length - 1].date : null;
                     return { ...c, sessions: sessions.length, revenue, lastSession };
