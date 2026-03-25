@@ -738,10 +738,6 @@
                     <label class="text-xs font-bold text-gray-400 uppercase block mb-1">הערות</label>
                     <textarea id="cm-notes" placeholder="אלרגיות, מידע חשוב, תנאים מיוחדים..." class="input-style w-full p-4 h-20 resize-none"></textarea>
                 </div>
-                <div>
-                    <label class="text-xs font-bold text-gray-400 uppercase block mb-1">🕐 שיעור אחרון (ידני — עוקף חישוב אוטומטי)</label>
-                    <input type="date" id="cm-manual-last" class="input-style w-full p-4">
-                </div>
             </div>
             <div class="flex gap-3 mt-6">
                 <button onclick="app.closeClientModal()" class="flex-1 py-4 bg-gray-100 text-gray-500 font-bold rounded-2xl">ביטול</button>
@@ -1372,7 +1368,7 @@
                                     ${(c.dogs && c.dogs.length > 0 ? c.dogs : (c.dogName ? [{name:c.dogName, breed:c.breed, dob:c.dogDob}] : [])).map((dog, di) => dog.name ? `<div class="flex items-center gap-2.5 text-sm"><span class="text-base w-5 text-center">🐾</span><span class="font-medium">${app.esc(dog.name)}${dog.breed ? ' · ' + app.esc(dog.breed) : ''}${dog.dob ? ' · ' + app.calculateAge(dog.dob) : ''}</span></div>` : '').join('')}
                                     ${c.pricePerSession ? `<div class="flex items-center gap-2.5 text-sm"><span class="text-base w-5 text-center">💰</span><span class="font-medium">₪${c.pricePerSession} לשיעור</span></div>` : ''}
                                     ${c.startDate ? `<div class="flex items-center gap-2.5 text-sm"><span class="text-base w-5 text-center">📅</span><span class="font-medium">לקוח מ-${new Date(c.startDate).toLocaleDateString('he-IL')}</span></div>` : ''}
-                                    ${lastSession ? `<div class="flex items-center gap-2.5 text-sm"><span class="text-base w-5 text-center">🕐</span><span class="font-medium text-gray-500">שיעור אחרון: ${app.esc(lastSession.date)}</span></div>` : ''}
+                                    <div class="flex items-center gap-2.5 text-sm"><span class="text-base w-5 text-center">🕐</span><span class="font-medium text-gray-500">שיעור אחרון:&nbsp;</span><input type="date" style="border:none;background:transparent;font-size:13px;font-weight:600;color:#6b7280;direction:ltr;width:130px;" value="${c.manualLastSession || (lastSession ? (() => { const p=(lastSession.date||'').split('.'); if(p.length===3){const y=p[2].length===4?p[2]:'20'+p[2];return y+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');} return ''; })() : '')}" onchange="app.setManualLastSession('${c.id}', this.value)"></div>
                                     ${c.notes ? `<div class="bg-amber-50 border border-amber-100 rounded-xl p-3 text-sm text-amber-800 font-medium">${app.esc(c.notes)}</div>` : ''}
                                     ${lastSession ? `
                                         <div class="pt-1">
@@ -1410,7 +1406,6 @@
                     document.getElementById('cm-price').value = c.pricePerSession || '';
                     document.getElementById('cm-startdate').value = c.startDate || '';
                     document.getElementById('cm-notes').value = c.notes || '';
-                    document.getElementById('cm-manual-last').value = c.manualLastSession || '';
                     // Load dogs array (or build from legacy fields)
                     if (c.dogs && c.dogs.length > 0) {
                         dogsData = c.dogs;
@@ -1427,7 +1422,6 @@
                     });
                     document.getElementById('cm-service').value = 'אילוף פרטי';
                     document.getElementById('cm-startdate').value = '';
-                    document.getElementById('cm-manual-last').value = '';
                 }
 
                 // Fill dog 1
@@ -1526,7 +1520,6 @@
                     pricePerSession: document.getElementById('cm-price').value.trim(),
                     startDate: document.getElementById('cm-startdate').value,
                     notes: document.getElementById('cm-notes').value.trim(),
-                    manualLastSession: document.getElementById('cm-manual-last').value || null,
                 };
                 if (editId) {
                     const idx = app.state.clients.findIndex(c => c.id === editId);
@@ -1539,6 +1532,11 @@
                 app.save();
                 app.closeClientModal();
                 app.render();
+            },
+
+            setManualLastSession: (id, val) => {
+                const idx = app.state.clients.findIndex(c => c.id === id);
+                if (idx !== -1) { app.state.clients[idx].manualLastSession = val || null; app.save(); app.render(); }
             },
 
             delClient: (id) => {
@@ -2301,17 +2299,13 @@
                     }
                     const d = new Date(s); return isNaN(d) ? null : d;
                 };
-                // Manual override takes priority
                 if (c.manualLastSession) {
                     const d = parseAnyDate(c.manualLastSession);
-                    if (d) {
-                        const diffDays = (new Date() - d) / (1000 * 60 * 60 * 24);
-                        return diffDays > 60 ? 'inactive' : 'active';
-                    }
+                    if (d) { const diff = (new Date() - d) / (1000*60*60*24); return diff > 60 ? 'inactive' : 'active'; }
                 }
                 const allMissions = app.state.missions.filter(m => m.client === c.name);
                 if (allMissions.length === 0) return 'new';
-                const missions = allMissions.map(m => ({ _ts: parseAnyDate(m.date), date: m.date })).filter(m => m._ts).sort((a, b) => a._ts - b._ts);
+                const missions = allMissions.map(m => ({ _ts: parseAnyDate(m.date) })).filter(m => m._ts).sort((a, b) => a._ts - b._ts);
                 if (missions.length === 0) return 'active';
                 const diffDays = (new Date() - missions[missions.length - 1]._ts) / (1000 * 60 * 60 * 24);
                 return diffDays > 60 ? 'inactive' : 'active';
