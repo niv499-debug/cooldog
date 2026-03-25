@@ -2,8 +2,6 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CoolDog</title>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -740,6 +738,10 @@
                     <label class="text-xs font-bold text-gray-400 uppercase block mb-1">הערות</label>
                     <textarea id="cm-notes" placeholder="אלרגיות, מידע חשוב, תנאים מיוחדים..." class="input-style w-full p-4 h-20 resize-none"></textarea>
                 </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-400 uppercase block mb-1">🕐 שיעור אחרון (ידני — עוקף חישוב אוטומטי)</label>
+                    <input type="date" id="cm-manual-last" class="input-style w-full p-4">
+                </div>
             </div>
             <div class="flex gap-3 mt-6">
                 <button onclick="app.closeClientModal()" class="flex-1 py-4 bg-gray-100 text-gray-500 font-bold rounded-2xl">ביטול</button>
@@ -1408,6 +1410,7 @@
                     document.getElementById('cm-price').value = c.pricePerSession || '';
                     document.getElementById('cm-startdate').value = c.startDate || '';
                     document.getElementById('cm-notes').value = c.notes || '';
+                    document.getElementById('cm-manual-last').value = c.manualLastSession || '';
                     // Load dogs array (or build from legacy fields)
                     if (c.dogs && c.dogs.length > 0) {
                         dogsData = c.dogs;
@@ -1424,6 +1427,7 @@
                     });
                     document.getElementById('cm-service').value = 'אילוף פרטי';
                     document.getElementById('cm-startdate').value = '';
+                    document.getElementById('cm-manual-last').value = '';
                 }
 
                 // Fill dog 1
@@ -1522,6 +1526,7 @@
                     pricePerSession: document.getElementById('cm-price').value.trim(),
                     startDate: document.getElementById('cm-startdate').value,
                     notes: document.getElementById('cm-notes').value.trim(),
+                    manualLastSession: document.getElementById('cm-manual-last').value || null,
                 };
                 if (editId) {
                     const idx = app.state.clients.findIndex(c => c.id === editId);
@@ -2296,6 +2301,14 @@
                     }
                     const d = new Date(s); return isNaN(d) ? null : d;
                 };
+                // Manual override takes priority
+                if (c.manualLastSession) {
+                    const d = parseAnyDate(c.manualLastSession);
+                    if (d) {
+                        const diffDays = (new Date() - d) / (1000 * 60 * 60 * 24);
+                        return diffDays > 60 ? 'inactive' : 'active';
+                    }
+                }
                 const allMissions = app.state.missions.filter(m => m.client === c.name);
                 if (allMissions.length === 0) return 'new';
                 const missions = allMissions.map(m => ({ _ts: parseAnyDate(m.date), date: m.date })).filter(m => m._ts).sort((a, b) => a._ts - b._ts);
