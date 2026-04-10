@@ -3164,6 +3164,7 @@
                 <div class="ag-sub" id="ag-sub-txt">מחובר לנתונים ✓</div>
             </div>
             <button id="agent-close" onclick="app.agent.toggle()">✕</button>
+            <button onclick="app.agent.clearChat()" title="נקה שיחה" style="width:34px;height:34px;border-radius:50%;background:var(--surface2);border:none;cursor:pointer;font-size:16px;color:var(--text-muted);display:flex;align-items:center;justify-content:center;margin-right:4px;">🗑️</button>
         </div>
         <div id="agent-chips">
             <button class="ag-chip" onclick="app.agent.ask('מה ההכנסות החודש?')">💰 הכנסות החודש</button>
@@ -3289,6 +3290,10 @@ ${businessData}
             inputEl.disabled = true;
             this.showTyping();
 
+            // שמור רק 10 הודעות אחרונות כדי לא להעמיס
+            if (this.history.length > 20) {
+                this.history = this.history.slice(-20);
+            }
             this.history.push({ role: 'user', parts: [{ text }] });
 
             try {
@@ -3313,12 +3318,17 @@ ${businessData}
                     this.history.push({ role: 'model', parts: [{ text: aiText }] });
                     this.addMessage(aiText, 'ai');
                 } else {
-                    this.addMessage('סליחה, לא הצלחתי לקבל תשובה. נסה שוב.', 'ai');
-                    console.error('Gemini error:', data);
+                    // שגיאה מ-Gemini — נקה history ונסה שוב
+                    this.history = [];
+                    const errMsg = data.error?.message || JSON.stringify(data);
+                    console.error('Gemini error:', errMsg);
+                    this.addMessage('שגיאה מהשרת. השיחה אופסה — נסה שוב.', 'ai');
                 }
             } catch (err) {
                 this.hideTyping();
-                this.addMessage('שגיאת תקשורת. בדוק חיבור לרשת.', 'ai');
+                // שגיאת רשת — נקה history
+                this.history = [];
+                this.addMessage('שגיאת תקשורת. השיחה אופסה — נסה שוב.', 'ai');
                 console.error(err);
             } finally {
                 this.busy = false;
@@ -3326,6 +3336,13 @@ ${businessData}
                 inputEl.disabled = false;
                 inputEl.focus();
             }
+        },
+
+        clearChat() {
+            this.history = [];
+            document.getElementById('agent-messages').innerHTML = '';
+            const cnt = app.state.clients?.length || 0;
+            this.addMessage(`שיחה אופסה ✓\nמחובר ל-CoolDog — ${cnt} לקוחות. מה תרצה לדעת?`, 'ai');
         }
     };
     </script>
