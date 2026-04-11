@@ -3164,6 +3164,7 @@
                 <div class="ag-sub" id="ag-sub-txt">מחובר לנתונים ✓</div>
             </div>
             <button id="agent-close" onclick="app.agent.toggle()">✕</button>
+            <button onclick="app.agent.resetKey()" title="החלף API Key" style="width:34px;height:34px;border-radius:50%;background:var(--surface2);border:none;cursor:pointer;font-size:16px;color:var(--text-muted);display:flex;align-items:center;justify-content:center;margin-right:4px;">🔑</button>
             <button onclick="app.agent.clearChat()" title="נקה שיחה" style="width:34px;height:34px;border-radius:50%;background:var(--surface2);border:none;cursor:pointer;font-size:16px;color:var(--text-muted);display:flex;align-items:center;justify-content:center;margin-right:4px;">🗑️</button>
         </div>
         <div id="agent-chips">
@@ -3177,6 +3178,26 @@
             <button class="ag-chip" onclick="app.agent.ask('כתוב לי מערך שיעור לכלב שמתחיל אילוף')">📋 מערך שיעור</button>
         </div>
         <div id="agent-messages"></div>
+
+        <!-- מסך הגדרת API Key -->
+        <div id="agent-key-screen" style="display:none;flex:1;flex-direction:column;align-items:center;justify-content:center;padding:32px;gap:16px;text-align:center;">
+            <div style="font-size:48px">🔑</div>
+            <div style="font-weight:900;font-size:18px;">הגדרת API Key</div>
+            <div style="color:var(--text-muted);font-size:14px;line-height:1.6;">
+                כנס ל-<strong>console.groq.com</strong> → API Keys → צור key חדש<br>
+                ה-key נשמר אצלך בדפדפן בלבד ולא עולה ל-GitHub
+            </div>
+            <input id="agent-key-input" type="password" placeholder="gsk_..." dir="ltr"
+                style="width:100%;max-width:340px;padding:14px 16px;border-radius:16px;border:2px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;font-family:'Assistant',sans-serif;outline:none;"
+                onkeydown="if(event.key==='Enter')app.agent.saveKey()">
+            <button onclick="app.agent.saveKey()"
+                style="width:100%;max-width:340px;padding:14px;background:#e31e24;color:white;border:none;border-radius:16px;font-size:16px;font-weight:700;font-family:'Assistant',sans-serif;cursor:pointer;">
+                שמור והתחל
+            </button>
+            <a href="https://console.groq.com/keys" target="_blank"
+                style="color:#e31e24;font-size:13px;font-weight:700;">פתח Groq Console ←</a>
+        </div>
+
         <div id="agent-input-bar">
             <textarea id="agent-input" placeholder="שאל את הסוכן..." rows="1" dir="rtl"
                 onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();app.agent.send();}"
@@ -3199,14 +3220,54 @@
             this.opened = !this.opened;
             panel.classList.toggle('open', this.opened);
             if (this.opened) {
-                document.getElementById('agent-input').focus();
-                // Show welcome if first open
-                const msgs = document.getElementById('agent-messages');
-                if (msgs.children.length === 0) {
-                    const cnt = app.state.clients?.length || 0;
-                    this.addMessage(`שלום ניב! 👋\n\nמחובר לנתוני CoolDog — **${cnt} לקוחות**.\n\nאני מכיר את העסק שלך לעומק: לקוחות, שיעורים, כספים, תורים, ואפילו את קולין, זיפו ומומו 🐾\n\nמה תרצה לדעת?`, 'ai');
+                const key = localStorage.getItem('cd-groq-key');
+                if (!key) {
+                    this.showKeyScreen();
+                } else {
+                    this.showChatScreen();
+                    document.getElementById('agent-input').focus();
+                    const msgs = document.getElementById('agent-messages');
+                    if (msgs.children.length === 0) {
+                        const cnt = app.state.clients?.length || 0;
+                        this.addMessage(`שלום ניב! 👋\n\nמחובר לנתוני CoolDog — **${cnt} לקוחות**.\n\nאני מכיר את העסק שלך לעומק: לקוחות, שיעורים, כספים, תורים, ואפילו את קולין, זיפו ומומו 🐾\n\nמה תרצה לדעת?`, 'ai');
+                    }
                 }
             }
+        },
+
+        showKeyScreen() {
+            document.getElementById('agent-key-screen').style.display = 'flex';
+            document.getElementById('agent-messages').style.display = 'none';
+            document.getElementById('agent-input-bar').style.display = 'none';
+            document.getElementById('agent-chips').style.display = 'none';
+            setTimeout(() => document.getElementById('agent-key-input').focus(), 100);
+        },
+
+        showChatScreen() {
+            document.getElementById('agent-key-screen').style.display = 'none';
+            document.getElementById('agent-messages').style.display = 'flex';
+            document.getElementById('agent-input-bar').style.display = 'flex';
+            document.getElementById('agent-chips').style.display = 'flex';
+        },
+
+        saveKey() {
+            const key = document.getElementById('agent-key-input').value.trim();
+            if (!key.startsWith('gsk_')) {
+                alert('Key לא תקין — חייב להתחיל עם gsk_');
+                return;
+            }
+            localStorage.setItem('cd-groq-key', key);
+            this.showChatScreen();
+            document.getElementById('agent-input').focus();
+            const cnt = app.state.clients?.length || 0;
+            this.addMessage(`שלום ניב! 👋\n\nמחובר לנתוני CoolDog — **${cnt} לקוחות**.\n\nמה תרצה לדעת?`, 'ai');
+        },
+
+        resetKey() {
+            localStorage.removeItem('cd-groq-key');
+            this.history = [];
+            document.getElementById('agent-messages').innerHTML = '';
+            this.showKeyScreen();
         },
 
         ask(text) {
@@ -3297,7 +3358,8 @@ ${businessData}
             this.history.push({ role: 'user', content: text });
 
             try {
-                const GROQ_KEY = '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';
+                const GROQ_KEY = localStorage.getItem('cd-groq-key');
+                if (!GROQ_KEY) { this.showKeyScreen(); setBusy(false); return; }
                 // בנה היסטוריה בפורמט OpenAI
                 const messages = [
                     { role: 'system', content: this.buildSystemPrompt() },
